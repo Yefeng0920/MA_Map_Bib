@@ -1,0 +1,28 @@
+Variable name,Description of variable,Type
+Paper #,Abritary number starting at 1 for each original paper and increasing by 1 for each Paper. Same as Paper level and Experiment level.,numeric
+Original paper title,Title of original paper.,string
+Year,Year original paper was published.,"categorical: 2010, 2011, 2012"
+Original paper journal,Name of journal that published original paper.,"categorical: Nature, Nature Cell Biology, Nature Medicine, Nature Genetics, Cell, Cancer Cell, Science, Science Translational Medicine, PNAS, Genome Research"
+Number of original authors,Number of bibliographic authors on the original paper.,numeric
+OSF project link,URL to project page on OSF.,string
+Draft protocol shared with original authors date,Date the draft protocol document was emailed to corresponding original authors for feedback.,date
+Budget per paper at project onset when originally identified by RP:CB team,Budget (in US dollars) projected per paper at onset of project.,numeric
+Anticipated budget when Registered Report manuscript ready for submission to eLife,Budget (in US dollars) projected after sourcing replicating labs (with feedback from original authors) and Registered Report submitted for peer review.,numeric
+Anticipated budget when Registered Report accepted and published in eLife,Budget (in US dollars) projected after peer review and acceptance of Registered Report.,numeric
+Actual budget at completion of replication attempt,Budget (in US dollars) after completion of experimental work.,numeric
+Registered Report submission date,Date Registered Report was submitted to eLife.,date
+Registered Report acceptance date,Date Registered Report was accepted by eLife.,date
+Link to Registered Report,URL to the published Registered Report.,string
+Experimental work start date,"Earliest start date indicated by a replication lab. If no start date, then Registered Report acceptance date or quote acceptance date on Science Exchange platform.",date
+Experimental work end date,Latest date of completing experimental data collection by a replication lab.,date
+Replication study fully completed,"Indicates how much experimental work was completed based on what was proposed in the Registered Report. Partial indicates some, but not all, of the replication was completed with outcome level data. NA indicates a published Registered Report protocol but no experimental work started, or no published Registered Report. Note: some published Replication Studies are indicated as partial because not all of the experiments were fully complete, but was still considered complete enough for publication. See 'If Replication study incomplete, why?' for details.","categorical: Yes, No, Partial, NA"
+"If Replication study incomplete, why?",Brief written description of why replications were not completed (either in full or partially). NA indicates replication experiment was completed or not attempted.,string
+Replication study submission date,Date Replication Study was submitted to eLife.,date
+Replication study acceptance date,Date Replication Study was accepted by eLife.,date
+Link to Replication study,URL to the published Replication Study.,string
+Did original authors respond to any emails?,Indicates if the corresponding authors from the original paper replied to any emails sent from project team.,"categorical: Yes, No"
+Did the original paper have a potential conflict of issue statement?,Indicates if the original paper has a conflict of issue statement.,"categorical: Yes, No"
+Did the replication study have a potential conflict of interest statement?,Indicates if the Replication Study has a conflict of issue statement. NA indicates no published Replication Study.,"categorical: Yes, No, NA"
+Number of lab(s) contracted for the entire project,Number of labs contracted for the replication for the given paper. NA indicates no published Registered Report.,numeric
+Contracted lab(s) for the entire paper,"Unique identifier to indicate the lab(s) contracted for the replication for the given paper. Beginning of unique identifier indicates the type of lab (Core = academic shared resource facility; CRO = contract research organization). End of unique identifier is a number between 1 and 22 for Core and 1 and 26 for CRO, which are arbitrary numbers assigned to each unique lab of each type. NA indicates there were no lab(s) contracted for the replication.",string
+Notes,Notes about any of the variables where relevant.,string
