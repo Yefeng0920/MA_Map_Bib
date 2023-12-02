@@ -118,7 +118,7 @@ source(here("Function","custom.R"))
 
 # Enrichment 1: Evidence mapping 
 
-The first enrichment analysis is evidence mapping (sometimes termed scoping review, evidence review). It contains three types of plots: (1)**grid-like plots (Figure I)**, (2) __Sankey diagrams (Figure II)__, and (3) __phylogenetic trees (Figure III)__.
+The first enrichment analysis is evidence mapping (sometimes termed scoping review, evidence review). It contains three types of plots: (1) **grid-like plots (Figure I)**, (2) __Sankey diagrams (Figure II)__, and (3) __phylogenetic trees (Figure III)__.
 
 ## Grid-like plots 
 
