@@ -26,7 +26,7 @@ The `Function` folder includes the custom R function used to generate the sample
 
 ### `R` folder
 
-The `R` folder includes the R scripts used to reproduce all figures shown in the main text. The scripts are formated both in Rmarkdown (`MA_Map_Bib_V2.Rmd`) and html (`MA_Map_Bib_V2.html`).
+The `R` folder includes the R scripts used to reproduce all figures shown in the main text. The scripts are formatted both in Rmarkdown (`MA_Map_Bib_V2.Rmd`) and html (`MA_Map_Bib_V2.html`).
 
 ## Licence
 
