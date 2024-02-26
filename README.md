@@ -1,4 +1,4 @@
-# Enriching meta-analyses through scoping review, bibliometrics, and alternative impact metrics: Visualizing study characteristics, hidden risk of bias, societal influence, and research translation
+# Visualization toolkits for enriching meta-analyses through evidence map, bibliometrics, and alternative impact metrics
 
 ## Overview
 
