@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a repository containing the data and code for reproducing results from Computationally reproducing results from 
+This is a repository containing the data and code for reproducing results from:    
 
 > Yefeng Yang, Malgorzata Lagisz, Shinichi Nakagawa. Enriching meta-analyses through scoping review, bibliometrics, and alternative impact metrics: Visualizing study characteristics, hidden risk of bias, societal influence, and research translation. arXiv, 2023.
 
