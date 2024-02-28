@@ -45,8 +45,7 @@ Email: yefeng.yang1@unsw.edu.au
 - Professor Shinichi Nakagawa, PhD, FRSN
 
 Evolution & Ecology Research Centre, EERC
-School of Biological, Earth and Environmental Sciences, BEES
-The University of New South Wales, Sydney, Australia
+School of Biological, Earth and Environmental Sciences, BEES. 
+The University of New South Wales, Sydney, Australia  
 
-Email: s.nakagawa@unsw.edu.au
-
+Email: s.nakagawa@unsw.edu.au.  
