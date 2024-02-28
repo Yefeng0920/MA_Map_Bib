@@ -22,7 +22,7 @@ The `data` folder includes the raw data files that were retrieved from meta-anal
 
 ### `Function` folder
 
-The `Function` folder includes the custom R function used to generate the sample figures shown in the main text.
+The `Function` folder includes all the custom R functions used to generate the sample figures shown in the main text.
 
 ### `R` folder
 
@@ -50,4 +50,3 @@ The University of New South Wales, Sydney, Australia
 
 Email: s.nakagawa@unsw.edu.au
 
-mytest

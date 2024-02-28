@@ -1,9 +1,23 @@
 #-------------------------------------------------------------------------------------------------
-# meta_aggregate was inspired by https://github.com/meghapsimatrix/shiny_egm/blob/main/tidy_meta.R
+# custom_meta_aggregate was inspired by https://github.com/meghapsimatrix/shiny_egm/blob/main/tidy_meta.R
 # but the computational of mean effects is changed. We used robust point estimation to estimate mean effects. 
 # Details see Yang Y, Lagisz M, Williams C, et al. Robust point and variance estimation for ecological and evolutionary meta-analyses with selective reporting and dependent effect sizes[J]. 2023. https://ecoevorxiv.org/repository/view/6018/ 
 #-------------------------------------------------------------------------------------------------
-meta_aggregate <- function(data, rho = 0.5){
+
+#' @title custom_meta_aggregate
+#' @description custom_meta_aggregate is used to aggregate effect sizes
+#'  and their variances from multiple studies.
+#'  The function can also handle the situation when there is only one effect size in the dataset.
+#'  In this case, the function will return the effect size and its variance.
+#' @param data A data frame containing effect sizes and their variances.
+#'  The data frame should contain at least three columns: study_id, yi, and vi.
+#'  study_id is the unique identifier for each study. 
+#'  yi is the effect size and vi is the variance of the effect size.  
+#' @param rho is the intra-class correlation coefficient (ICC) for the random effects model.
+#'  The default value of rho is 0.5.
+#' @return A data frame containing the aggregated effect size, the number of studies, and the number of effect sizes.
+
+custom_meta_aggregate <- function(data, rho = 0.5){
   
   n_studies <- length(unique(data$study_id))
   n_es <- nrow(data)
@@ -75,12 +89,17 @@ meta_aggregate <- function(data, rho = 0.5){
 
 
 
-
-
 #-------------------------------------------------------------------------------------------------
-# altmetric_aggregate is used to aggregate altmetric scores
+# custom_altmetric_aggregate is used to aggregate altmetric scores
 #-------------------------------------------------------------------------------------------------
-altmetric_aggregate <- function(data){
+
+#' @title custom_altmetric_aggregate
+#' @description custom_altmetric_aggregate is used to aggregate altmetric scores.
+#' @param  data A data frame containing altmetric scores. 
+#' I needs to have study_id column with study IDs and score column with altmetric scores.
+#' @return A data frame containing the aggregated altmetric score, the number of studies, and the number of effect sizes.
+
+custom_altmetric_aggregate <- function(data){
   
   n_studies <- length(unique(data$study_id))
   n_es <- nrow(data)
@@ -132,9 +151,17 @@ altmetric_aggregate <- function(data){
 
 
 #-------------------------------------------------------------------------------------------------
-# translation_aggregate is used to aggregate policy and patent citation counts
+# custom_translation_aggregate is used to aggregate policy and patent citation counts
 #-------------------------------------------------------------------------------------------------
-translation_aggregate <- function(data){
+
+#' @title custom_translation_aggregate
+#' @description custom_translation_aggregate is used to aggregate policy and patent citation counts.
+#' @param  data A data frame containing policy and patent citation counts.
+#' I needs to have study_id column with study IDs and score column with altmetric scores.
+#' @return A data frame containing the aggregated policy and patent citation counts,
+#'   the number of studies, and the number of effect sizes.
+
+custom_translation_aggregate <- function(data){
   
   n_studies <- length(unique(data$study_id))
   n_es <- nrow(data)
@@ -174,10 +201,10 @@ translation_aggregate <- function(data){
 
 
 #-------------------------------------------------------------------------------------------------
-# # function getAltmetrics()
+# # function custom_getAltmetrics()
 #-------------------------------------------------------------------------------------------------
 
-getAltmetrics <- function(doi = NULL,
+custom_getAltmetrics <- function(doi = NULL,
                           foptions = list(),
                           ...) {
   if (!is.null(doi)) doi <- stringr::str_c("doi/", doi)
@@ -212,7 +239,7 @@ format.Altmetric <- function(altmetric.object) {
 altmetric_df <- function(altmetric.object) {
   df <- data.frame(t(unlist(altmetric.object)), stringsAsFactors = FALSE)
 }
-#altmetric.crawler[[n]]  <-  try(list(altmetric_df(getAltmetrics(doi = DOIs[n]))))
+#altmetric.crawler[[n]]  <-  try(list(altmetric_df(custom_getAltmetrics(doi = DOIs[n]))))
 # create a function to summarize Altmetric object
 summary.altmetric <- function(x, ...) {
   if (inherits(x, "altmetric"))  {
@@ -242,6 +269,10 @@ altmetric_summary <- function(object) {
   )
   return(altmetric.summary)
 }
+
+
+
+
 
 #-------------------------------------------------------------------------------------------------
 # geom_sankey comes from ihttps://github.com/davidsjoberg/ggsankey/blob/main/R/sankey.R
