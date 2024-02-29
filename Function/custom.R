@@ -203,7 +203,11 @@ custom_translation_aggregate <- function(data){
 #-------------------------------------------------------------------------------------------------
 # # function custom_getAltmetrics()
 #-------------------------------------------------------------------------------------------------
-
+#' @title custom_getAltmetrics
+#' @description custom_getAltmetrics retrieves Altmetrics data for a given DOI.
+#' @param doi The Digital Object Identifier (DOI) for which Altmetrics data is requested.
+#' @param foptions A list of additional options.
+#' @return Altmetrics data for the specified DOI.
 custom_getAltmetrics <- function(doi = NULL,
                           foptions = list(),
                           ...) {
@@ -275,11 +279,12 @@ altmetric_summary <- function(object) {
 
 
 #-------------------------------------------------------------------------------------------------
-# geom_sankey comes from ihttps://github.com/davidsjoberg/ggsankey/blob/main/R/sankey.R
+# alluvial comes from ihttps://github.com/davidsjoberg/ggsankey/blob/main/R/sankey.R
 #-------------------------------------------------------------------------------------------------
-utils::globalVariables(c(".", ".data", "x", "node", "next_node", "next_x", "..r"))
-# importFrom(ggplot2, "%+replace%")
+#' @title alluvial
+#' @description A function for creating alluvial diagrams
 #' @importFrom ggplot2 %+replace%
+utils::globalVariables(c(".", ".data", "x", "node", "next_node", "next_x", "..r"))
 
 # ** Support functions ----------
 prepare_params <- function(...) {
@@ -364,19 +369,6 @@ dlong <- function(.df, ..., value = NULL) {
 }
 
 
-#' @title sankey_themes
-#' @name theme_sankey
-#' @aliases theme_alluvial
-#' @aliases theme_sankey_bump
-#'
-#' @description Minimal themes for sankey, alluvial and sankey bump plots
-#'
-#' @param base_size base font size, given in pts.
-#' @param base_family base font family
-#' @param base_line_size base size for line elements
-#' @param base_rect_size base size for rect elements
-#'
-#' @export
 theme_sankey <-
   function(base_size = 11,
            base_family = "",
@@ -411,8 +403,7 @@ theme_sankey <-
     }
   }
 
-#' @rdname theme_sankey
-#' @export
+
 theme_alluvial <-
   function(base_size = 11,
            base_family = "",
@@ -443,8 +434,7 @@ theme_alluvial <-
     }
   }
 
-#' @rdname theme_sankey
-#' @export
+
 theme_sankey_bump <-
   function(base_size = 11,
            base_family = "",
