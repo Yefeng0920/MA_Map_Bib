@@ -18,7 +18,7 @@ The repository contains the following folders:
 
 ### `Data` folder
 
-The `data` folder includes the raw data files that were retrieved from meta-analysis papers published in different disciplines.
+The `data` folder includes the raw data files retrieved from meta-analysis papers published in different disciplines.
 
 ### `Function` folder
 
@@ -26,7 +26,7 @@ The `Function` folder includes all the custom R functions used to generate the s
 
 ### `R` folder
 
-The `R` folder includes the R scripts used to reproduce all figures shown in the main text. The scripts are formatted both in Rmarkdown (`MA_Map_Bib_V2.Rmd`) and html (`MA_Map_Bib_V2.html`).
+The `R` folder includes the R scripts that reproduce all figures in the main text. The scripts are formatted both in Rmarkdown (`MA_Map_Bib_V8.Rmd`) and html (`MA_Map_Bib_V8.html`).
 
 ## Licence
 
