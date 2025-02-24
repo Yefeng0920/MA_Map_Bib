@@ -1,0 +1,1664 @@
+---
+title: 'Visualization toolkits for enriching meta-analyses through evidence map, bibliometrics, and alternative impact metrics'
+subtitle: "Visualizing study characteristics, hidden risk of bias, societal influence, and research translation"
+author: "Yefeng Yang, Malgorzata Lagisz, Shinichi Nakagawa"
+output:
+  rmdformats::robobook:
+    code_folding: show #hide
+    self_contained: true
+    thumbnails: false
+    lightbox: true
+pkgdown:
+  as_is: true
+bibliography: references.bib
+csl: science.csl
+editor_options: 
+  chunk_output_type: console
+---
+
+# Contributors
+
+Yefeng Yang, Malgorzata Lagisz, Shinichi Nakagawa
+
+# Update
+
+Last update: Oct 2024
+
+# Preface 
+
+This document consists from two parts:
+
+- In __Part I__ we provide the R script with description of the code to reproduce the figures in the main text. For the explanation of each figure, see the main text.   
+
+- In __Part II__ we provide step-by-step tutorials for using ChatGPT, Gemini and Copilot to adapt the R scripts to another dataset (example) to recreate selected plots. Because this part relies probabilistic algorithms used by artificial intelligence, it is not guaranteed that the code will work identially for all readers or for all data sets.   
+
+
+__Note:__   
+
+If you wish to use the provided `R` code to analyze your own data, we recommend that you carefully read the functions and packages provided below. In other words, if you want to report this useful data and add values in a meta-analysis, you need to spend enough time to follow the instructions in this web page. Basically, you need to have some experience writing R code. If you have spent enough time and still get stuck, you can look at Part II where we provide provide instructions on how to generalize and translate the example `R` script to your own data leveraging three commercially free Large Language Models (LLMs).   
+
+Version information of each package used in this `html` document is listed at the end. The hosting GitHub repository can be found at `https://github.com/Yefeng0920/MA_Map_Bib`.  
+
+# Citation   
+
+If our paper and `R script` have helped you, please cite the following paper:   
+
+> Yefeng Yang, Malgorzata Lagisz, Shinichi Nakagawa. XX. arXiv, 2023. 
+
+# Contact  
+
+If you have any questions, mistakes, or bug to report, please contact corresponding authors:  
+
+- Dr. Yefeng Yang  
+
+Evolution & Ecology Research Centre, EERC   
+School of Biological, Earth and Environmental Sciences, BEES   
+The University of New South Wales, Sydney, Australia   
+
+Email: yefeng.yang1@unsw.edu.au   
+
+- Professor Shinichi Nakagawa, PhD, FRSN    
+
+Evolution & Ecology Research Centre, EERC    
+School of Biological, Earth and Environmental Sciences, BEES    
+The University of New South Wales, Sydney, Australia    
+
+Email: s.nakagawa@unsw.edu.au   
+
+# Set-up   
+
+Setting global options will apply those options to all of the following chunks of code in the tutorial.    
+
+```{r global options, include = FALSE}
+# Global options
+knitr::opts_chunk$set(
+  message = FALSE,
+  warning = FALSE, 
+  tidy = TRUE,
+  cache = TRUE,
+  echo = TRUE)
+```
+
+Our illustrations use R statistical software and existing R packages, which you will first need to download and install.   
+
+If you do not have it on your machine, first install `R` ([download link](https://cran.r-project.org/)). We recommend also downloading `RStudio`, a popular integrated development environment for coding with `R`, created by a company named posit ([download link](https://posit.co/products/open-source/rstudio/)).   
+
+After installing `R`, you must install several packages that contain necessary functions for performing the analyses in this tutorial. If the packages are archived in CRAN, use `install.packages()` to install them. To install packages that are not on CRAN and archived in Github repositories, execute `devtools::install_github()`.   
+
+
+```{r packages, cache = FALSE, echo = T}
+# tidy
+# rm(list=ls())
+# Install and load necessary library
+pacman::p_load(knitr,
+               rmdformats,
+               tidyverse, 
+               here,
+               DT,
+               ggpubr,
+               readxl, 
+               metafor,
+               lme4,
+               car,
+               ggplot2,
+               viridis,
+               ggthemr, 
+               pander,
+               formatR,
+               rotl,
+               cowplot,
+               ape,
+               ggstance,
+               ggtree, #if ggtree not installing use: devtools::install_github("GuangchuangYu/ggtree") and then load manually: library(ggtree)
+               flextable,
+               bibliometrix,
+               circlize,
+               igraph,
+               clubSandwich
+               )
+
+
+
+```
+
+# Custom functions   
+
+We provide custom helper functions necessary for our illustrations. You can load these custom functions from the `.R file` in **Function** sub-directory using the source function and the code provided below. Alternatively, you can copy and paste the code of these functions into your console and execute the code them to load functions into your computer's working memory.   
+
+```{r function, warning = FALSE, echo = TRUE}
+# custom function
+source(here("Function","custom.R"))
+```
+
+# Part I - reproduce the figures.     
+
+# Enrichment 1: Evidence mapping    
+
+The first enrichment analysis is evidence mapping (sometimes termed scoping review, evidence review). It contains three types of plots: (1) **grid-like plots**, (2) __Sankey/alluvial diagrams__, and (3) __phylogenetic trees__.    
+
+## Grid-like plots    
+
+We use `Data 1` in the main text to illustrate how to make the grid-like plots (Figure 2). `Data 1` was originally collected by Hodkinson et al. @hodkinson2020self, who conducted a network meta-analysis to assess the efficacy of different self-management interventions (multidisciplinary case management, regularly supported self-management, and minimally supported self-management) in enhancing the quality of life among asthma patients. Note that the following `R code` was adapted from @polanin2023evidence.   
+
+### Data 1   
+
+```{r data1, warning = FALSE, echo = TRUE}
+# load data
+dat <- read_xlsx(here("Data","Hodkinson_2020.xlsx"))
+
+# preprocess
+dat$vi <- dat$`Std Err2`^2 
+dat <- dat[, c("Intervention model", "Outcome", "Hedgesg", "vi", "Study name")]
+names(dat) <- c("dimension1", "dimension2", "yi", "vi", "study_id")
+
+# show data in a table
+t1 <- dat %>% dfround(3) %>% DT::datatable()
+t1
+```
+
+### Visualization   
+
+Figure 2 shown in the main text:    
+
+```{r Figure 2, warning = FALSE, echo = TRUE, fig.height=10, fig.width=10}
+# get estimate for each cell
+est_dat <- dat %>% group_by(dimension1, dimension2) %>%
+  group_modify(~ custom_meta_aggregate(.x, rho = 0.5)) %>% ungroup()
+
+# traditional map with the number of study
+est_dat$dimension1 <- as.factor(est_dat$dimension1)
+
+Box1_map1 <- ggplot(est_dat, aes(x = dimension1, y = dimension2, size = n_studies) ) +
+  geom_point(alpha = 0.5, color = RColorBrewer::brewer.pal(n = 8, name = "Dark2")[1]) + 
+  labs(x = "Dimension 1 (Intervention)", y = "Dimension 2 (Outcome)") +
+  scale_size(range=c(5,10)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) + # 
+  scale_y_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  theme_bw() +
+  guides(size = "none") +
+  theme(legend.position='top', 
+        legend.justification='right',
+        legend.direction='horizontal', 
+        axis.text = element_text(color = "black"),
+        axis.title = element_text(color = "black")) +
+  geom_text(aes(label = as.character(n_studies)), size = 4, color = "gray10") +
+  labs(caption = "The value in the cell is the number of studies") + 
+   theme(plot.caption = element_text(size = 10, color = "gray10", face = "italic"),
+         axis.text = element_text(size = 12),
+         axis.title = element_text(size = 12, face = "bold")) 
+
+
+# traditional map with the number of effect size
+Box1_map2 <- ggplot(est_dat, aes(x = dimension1, y = dimension2, size = n_es)) +
+  geom_point(alpha = 0.5, color = RColorBrewer::brewer.pal(n = 8, name = "Dark2")[3]) + 
+  labs(x = "Dimension 1 (Intervention)", y = "Dimension 2 (Outcome)") +
+  scale_size(range=c(5,10)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  scale_y_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  theme_bw() +
+  guides(size = "none") +
+  theme(legend.position='top', 
+        legend.justification='right',
+        legend.direction='horizontal',  
+        axis.text = element_text(color = "black"),
+        axis.title = element_text(color = "black")) +
+  geom_text(aes(label = as.character(n_es)), size = 4, color = "gray10") +
+  labs(caption = "The value in the cell is the number of effect sizes") +
+   theme(plot.caption = element_text(size = 10, color = "gray10", face = "italic"),
+         axis.text = element_text(size = 12),
+         axis.title = element_text(face = "bold", size = 12))
+
+
+
+# with effect size information
+Box1_map3 <- ggplot(est_dat, aes(x = dimension1, y = dimension2, size = n_es, color = estimate)) +
+  geom_point(alpha = 0.6) + 
+  scale_color_gradient(
+    low = "blue",
+    high = "red", 
+    limits = c(-1,1),
+    guide = "colourbar") + 
+  labs(x = "Dimension 1 (Intervention)", y = "Dimension 2 (Outcome)", color = "Meta-analytic mean effect size") +
+  scale_size(range=c(5,10)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  scale_y_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  theme_bw() +
+  guides(size = "none") +
+  theme(legend.position='top', 
+        legend.justification='right',
+        legend.direction='horizontal', 
+        axis.text = element_text(color = "black"),
+        axis.title = element_text(color = "black")) +
+  geom_text(aes(label = as.character(n_es)), size = 4, color = "gray10") +
+  labs(caption = "The value in the cell is the number of effect sizes") + 
+   theme(plot.caption = element_text(size = 10, color = "gray10", face = "italic"),
+         axis.text = element_text(size = 12),
+         axis.title = element_text(face = "bold", size = 12))
+
+
+# 3-dimensional graph - we do not recommend to 3 dimensional graph because this is not that friendly to end-user
+dat <- read_xlsx(here("Data","Hodkinson_2020.xlsx"))
+dat$vi <- dat$`Std Err2`^2
+dat <- dat[, c("Intervention model", "Outcome", "Age group", "Hedgesg", "vi", "Study name")]
+names(dat) <- c("dimension1", "dimension2", "dimension3", "yi", "vi", "study_id")
+
+# get estimate each cell 
+est_dat <- dat %>% group_by(dimension1, dimension2, dimension3) %>%
+  group_modify(~ custom_meta_aggregate(.x, rho = 0.5)) %>% ungroup()
+
+# with the third dimension
+Box1_map4 <- ggplot(est_dat, aes(x = dimension1, y = dimension2, 
+                      color = dimension3, 
+                      size = n_es  
+                      )) +
+  geom_point(alpha = 0.6, aes(group = dimension3), position = position_dodge(width= 0.5)) + 
+  scale_shape_manual(values = c(15, 19, 17, 18, 10, 4, 3, 7, 8, 13)) +
+  labs(x = "Dimension 1 (Intervention)", y = "Dimension 2 (Outcome)", color = "Diamension 3 (Population)") +
+  scale_size(range=c(5,10)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  scale_y_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  theme_bw() +
+  guides(size = "none") +
+  theme(legend.position='top', 
+        legend.justification='right',
+        legend.direction='horizontal', 
+        axis.text = element_text(color = "black"),
+        axis.title = element_text(color = "black")) +
+  geom_text(aes(label = as.character(n_es), group = dimension3), size = 4, color = "gray10", position = position_dodge(width = .5)) +
+  labs(caption = "The value in the cell is the number of effect sizes") + 
+   theme(plot.caption = element_text(size = 10, color = "gray10", face = "italic"),
+         axis.text = element_text(size = 12),
+         axis.title = element_text(face = "bold", size = 12))
+
+
+#Box1_map1 + Box1_map2 + Box1_map3 + Box1_map4 + patchwork::plot_layout(ncol = 2, nrow = 2) + patchwork::plot_annotation(tag_levels = "A")
+#png(filename = "Box1_map.png", width = 10, height = 10, units = "in", type = "windows", res = 400) #save as a png file
+plot_grid(Box1_map1, Box1_map2, Box1_map3, Box1_map4, labels = c('A','B','C','D'), label_size = 14, nrow = 2, ncol = 2)
+
+#NOTE: to display each plot separately call its object name, e.g.: Box1_map1
+```
+
+
+## Alluvial diagrams (Sankey diagrams)      
+
+We used `Data 2` in the main text to illustrate how to make the Sankey diagrams (Figure 3). `Data 2` was originally collected by Mertens et al. @mertens2022effectiveness, who employed a multilevel meta-analytic model to synthesize evidence on the effectiveness of choice architecture interventions (often referred to as nudges) for behaviour change across various techniques, behavioural domains, and other study characteristics (e.g., populations and locations).   
+
+### Data 2   
+
+Load and show data:   
+
+```{r data2, warning = FALSE, echo = TRUE}
+# load data
+dat <- read.csv(here("Data","Mertens_2021.csv"))
+names(dat)[1] <- "publication_id"
+# show data in a table
+t2 <- dat %>% dfround(3) %>% DT::datatable()
+t2
+```
+
+### Visualization   
+
+Plot construction:   
+
+```{r Figure 3, warning = FALSE, echo = TRUE}
+# pre-process
+dat <- dat %>%
+  dplyr::select(type_experiment, intervention_technique, intervention_category, domain, population, location) #select columns for the plot
+
+ggplot(dlong(dat, type_experiment, location, population,  intervention_category, domain, intervention_technique), aes(x = x, next_x = next_x, node = node, next_node = next_node, fill = factor(node), label = node)) +
+  sankey_p(flow.alpha = 0.8,
+              node.color = "transparent") +
+  sankey_p_label(size = 3, color = "white", fill = "gray10", alpha = 0.6) +
+  ggsci::scale_color_tron() + 
+  theme_sankey(base_size = 10) +
+  labs(x = NULL) +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = .5),
+        axis.text.x = element_text(color = "black", size = 9)) +
+scale_x_discrete(labels = c("Moderator 1 \n (Experimental \n approach)", "Moderator 2 \n (Geographical \n location)", "Moderator 3 \n (Population \n characteristic)",  "Moderator 4 \n (Architecture \n category)", "Moderator 5 \n (Behavioral \n domain)", "Moderator 6 \n (Intervention \n technique)"), position = "top") 
+
+#ggsave("Sankey_plot.pdf", width = 6, height = 5, units = "in") #save as a pdf file
+```
+
+
+## Phylogenetic trees   
+
+We used `Data 3` in the main text to illustrate how to make the phylogenetic trees (Figure 4). `Data 3` was originally collected by Sanders  et al. @sanders2021meta , who used a Bayesian meta-analytic model to synthesize evidence regarding the impacts of artificial light at night on physiological, phenological, life history, activity patterns, and population/community-based outcomes. This meta-analysis included more than 180 species. We only used the physiological outcomes.    
+
+### Data 3    
+
+Load and show data:   
+
+```{r data3, warning = FALSE, echo = TRUE}
+# load data
+dat <- read_xlsx(here("Data","Sanders_2021.xlsx"))
+# show data in a table
+t3 <- dat %>% dfround(3) %>% DT::datatable()
+t3
+```
+
+### Visualization   
+
+Plot construction:     
+
+```{r Figure 4, warning = FALSE, echo = TRUE}
+# some data wrangling
+dat$Species <- gsub('\\.', "_", dat$Species)
+dat <- dat[!is.na(dat$Species),] # 
+
+#check species we have
+#length(unique(dat$Species)) #184 unique species names, if no misspelling
+
+#find Open Tree Taxonomy (OTT) IDs for each species
+taxa <- tnrs_match_names(names = unique(dat$Species))
+
+# for illustrative purpose, we just delete the species that are not matched
+## find location
+pos <- which(dat$Species %in% c("Phodopus_sungeroru", "Electra?__sp", "Molgula_sp", "Baetis_spp", "Agrostis_tenuis", "Anthoxanthum_odoratum", "Myotis_daubentonii","_Myotis_mystacinus","_Myotis_brandtii","_Myotis_nattereri","_Plecotus_auritus", "Pipistrellus_pipistrelles","_Pipistrellus_nathusii", "Nyctalus_nyctalus","_Nyctalus_leisleri","_Eptesicus_serotinus_", "All_families", "Pipistrellus_hesperidus/Hypsugo_anchietaia", "Myotis?_sp", "MCF7", "7288cct", "A__cristatellus_", "A__evermanni", "A__gundlachi", "A__sagrei", "bat_community_", "N__leisleri", "Poecile_sp", "Coleoptera","_Diptera","_Lepidoptera","_Erebidae","_Chironomidae","_Noctuidae_and_Psychodidae", "Nyctalus_and_Eptesicus_spp", "Anoectochilus_roxburghii", "Myotis_pilosatibialis", "Silene_latifolia"))
+dat <- dat[-pos,]
+
+# match again
+taxa <- tnrs_match_names(names = unique(dat$Species)) # still some are not matched. But let's resolve it latter
+
+# check whether occur in the synthetic tree
+ott_in_tree <- ott_id(taxa)[is_in_tree(ott_id(taxa))] 
+#length(ott_id(taxa)) - length(is.na(ott_in_tree)) # still 10 did not appear in synthetic tree
+
+# check which 10
+out_tree <- filter(taxa, ! ott_id %in% ott_in_tree)
+#out_tree$search_string
+
+dat <- dat[!dat$Species %in% c("Leptocythere_pellucida", "Myotis_daubentonii,_Myotis_mystacinus,_Myotis_brandtii,_Myotis_nattereri,_Plecotus_auritus", "Pipistrellus_pipistrelles,_Pipistrellus_nathusii", "Nyctalus_nyctalus,_Nyctalus_leisleri,_Eptesicus_serotinus_", "Myotis_lucifugus", "Acyrthosiphont", "Carabidae", "Staphylinidae", "Eptesicus_bottae", "Corethrella_spp", "P__pipistrellus", "Myotis", "Coleoptera,_Diptera,_Lepidoptera,_Erebidae,_Chironomidae,_Noctuidae_and_Psychodidae", "Pipistrellus"),]
+
+# match again
+taxa <- tnrs_match_names(names = unique(dat$Species))
+#check again whether all otts occur in the synthetic tree
+ott_in_tree <- ott_id(taxa)[is_in_tree(ott_id(taxa))] 
+#length(ott_id(taxa)) - length(is.na(ott_in_tree)) # all good
+
+# now every ott occur in the synthesistic tree. But for the sake of brevity, we only visualize a subset of the tree
+# only use studies measuring physiology
+Physiology <- subset(dat, Category == "Physiology")
+# remove NA
+Physiology <- subset(Physiology, Species != "NA")
+taxa <- tnrs_match_names(names = unique(Physiology$Species))
+
+#make phylo tree
+tree <- suppressWarnings(tol_induced_subtree(ott_ids = ott_id(taxa))) 
+
+#the tip labels contain OTTs, which means they will not perfectly match the species names in our dataset or the taxon map that we created earlier,
+#remove the extra information from the tip labels later; with the IDs removed, we can use our taxon map to replace the tip labels in the tree with the species names from dataset 
+tree$tip.label <- strip_ott_ids(tree$tip.label, remove_underscores = TRUE) 
+
+# roughly approximate branch lengths using default method (Grafen's method with power = 1)
+tree <- compute.brlen(tree, method = "Grafen", power = 1)
+
+# compute phylogenetic correlation matrix assuming it evolves under a Brownian model (Felsenstein 1985, Martins and Hansen 1997); 
+tree_matrix <- vcv.phylo(tree, model = "Brownian", corr = T)   
+# visual
+ggcorrplot::ggcorrplot(tree_matrix, sig.level=0.05, lab_size = 4.5, p.mat = NULL, insig = c("pch", "blank"), pch = 1, pch.col = "black", pch.cex =1, tl.cex = 14) +
+  theme(axis.text.x = element_text(size = 10, margin=margin(-2,0,0,0)),
+        axis.text.y = element_text(size = 10, margin=margin(0,-2,0,0)),
+        panel.grid.minor = element_line(size=10)) + 
+  geom_tile(fill="white") +
+  geom_tile(height=0.8, width=0.8) +
+  scale_fill_gradient2(low = "#E69F00", mid = "white", high = "#56B4E9", midpoint = 0.5, breaks=c(0, 1), limit=c(0, 1)) + 
+ labs(fill = "Correlation")
+
+# decapitalise species names to match with the search string names in taxa
+Physiology <- Physiology %>% mutate(search_string = tolower(Species))  
+
+# align data
+Physiology <- left_join(Physiology, dplyr::select(taxa, search_string, unique_name, ott_id), by = "search_string")  
+
+#create the variables of spp and phylo
+Physiology <- Physiology %>% mutate(spp = unique_name, phylo = unique_name)
+
+# prepare annotation data
+## species-specific estimates as fixed effect
+agg.es <- escalc(measure = "SMD", m1i = Experimental_Mean, m2i = Control_Mean,sd1i = Experimental_SD,sd2i = Control_SD,n1i = Experimental_N,n2i = Control_N, data = Physiology) %>% aggregate(cluster=phylo, struct="CS",rho = 0.5,addk=TRUE)
+agg.es <- agg.es[c("phylo","yi","vi")]
+names(agg.es) <- c("Species","Mean","SE")
+agg.es <- agg.es %>% mutate(Lower_bound = Mean - sqrt(SE)*qnorm(0.975),
+                      Upper_bound = Mean + sqrt(SE)*qnorm(0.975)) %>% arrange(Species)
+N_obs <- Physiology %>% group_by(phylo) %>% summarise(N_obs=n()) # calculate sample size
+names(N_obs)[1] <- "Species"
+fe.spp.es <- left_join(agg.es,N_obs,by = "Species")
+tip.label <- data.frame(Species = tree$tip.label) # extract tip label
+fe.spp.es2 <- left_join(tip.label,fe.spp.es,by = "Species") 
+fe.spp.es2 <- fe.spp.es2 %>% mutate(z = Mean/SE, p = pnorm(abs(z),lower.tail = F)*2)
+
+# get class data
+spp.class <- dplyr::distinct(Physiology, phylo, .keep_all = TRUE) %>% dplyr::select(Class, phylo)
+names(spp.class)[2] <- "Species"
+spp.class2 <- left_join(tip.label,spp.class,by = "Species")
+
+# make the tree by adding plot elements sequentially:
+tree.p1 <- ggtree(tree, layout = "rectangular", cex = .4) 
+
+tree.p2 <- tree.p1 %<+% spp.class2 + 
+  geom_tiplab(aes(color = Class),size = 3, fontface = "italic", align = T, offset = 0.05) +
+  geom_tippoint(aes(color = Class)) + guides(color="none") +
+  xlim_expand(xlim = c(0,1.8), panel = "Tree") +
+  scale_color_viridis_d()
+
+
+tree.p3 <- facet_plot(tree.p2, panel = 'Sample size', data = fe.spp.es2, 
+				geom = ggstance::geom_barh, 
+				mapping = aes(x = N_obs, color = Class), fill = "transparent", alpha = 0.5, stat = 'identity')
+
+tree.p4 <- tree.p3 + geom_facet(panel = "Effect size", data = fe.spp.es2,
+           geom = ggstance::geom_pointrangeh, 
+           mapping = aes(x = Mean, xmin = Lower_bound, xmax = Upper_bound, color = Class)) + 
+  theme_tree2() +
+  theme(strip.background = element_rect(fill = "white")) + guides(fill = "none", color = "none")
+
+#png(filename = "Box1_phylo.png", width = 6, height = 5, units = "in", type = "windows", res = 400)
+facet_widths(tree.p4, c(Tree=0.5,`Sample size`=0.2,`Effect size`=0.25)) #adjust widths of the plot facets for display
+#dev.off()
+```
+
+
+# Enrichment 2: Bibliometric analysis   
+
+The second enrichment analysis is bibliometric anlaysis. It can produce two main graphs: (1) Co-authorship network (Figure 5), and (2) Country network (Figure 6).    
+
+
+## Co-authorship network   
+
+We use the bibliometric data associated with `Data 3` to illustrate the construction of co-authorship network (Figure IV) in meta-analytic evidence base. The figure was inspired by Moulin, et al. @moulin2020using, who originally implemented it using Matlab and VOSviewer.    
+
+### Data 3   
+
+Load and show data:    
+
+```{r bib.data3, warning = FALSE, message = FALSE, echo = TRUE}
+# load data
+dat <- read_xlsx(here("Data","Sanders_2021.xlsx"))
+# load bibliographic data
+M <- convert2df(here("Data","Sanders_2021_bib.csv"), dbsource = "scopus", format = "csv") %>% suppressMessages() # note that using here function does work for data wrangling
+# merge data
+dat.M <- left_join(M, dat, by = c("DI" = "DOI")) # DI denote DOI in bib data
+```
+
+
+### Visualization   
+
+Author collaboration network plot construction:    
+
+```{r Figure 5, warning = FALSE, echo = TRUE, fig.height=10, fig.width=10}
+# construct author collaboration network
+NetMatrix <- biblioNetwork(M, analysis = "collaboration",  network = "authors", sep = ";")
+net_matrix <- as.matrix(NetMatrix)
+diag(net_matrix) <- 0 
+g <- graph_from_adjacency_matrix(net_matrix, mode = "lower", weighted = "weight")
+# computing centrality measures for each vertex 
+V(g)$indegree <-  igraph::degree(g, mode = "in")
+V(g)$outdegree <- igraph::degree(g, mode = "out")
+V(g)$closeness <- igraph::closeness(g, mode = "total")
+V(g)$betweeness <- igraph::betweenness(g, normalized = TRUE)
+
+#  graph
+set.seed(2023)
+# using random walks to detect the network community
+wtc <- cluster_walktrap(g)
+# modularity(wtc)
+# modularity(g, membership(wtc))
+# member <- communities(wtc)
+# n_cluster <- sapply(member, length)
+
+#png(filename = "./Box2_author.png", width = 15, height = 15, units = "in", type = "windows", res = 400)
+plot(wtc, g, 
+     vertex.size = V(g)$indegree/3, # or V(g)$outdegree + 1
+     vertex.label = NA,
+     edge.arrow.size = .25)
+#NOTE: this plot rotates between few views due to some internal random algorithms used to place the nodes
+```
+
+Besides the visualization, we also can do some quantitative analysis:    
+
+```{r computation, warning = FALSE, echo = TRUE}
+# extracting each vectex features as a data.frame
+stats <- as_data_frame(g, what = "vertices")
+
+# computing quantiles for each vertex attributes 
+stats_degree <- with(stats, {
+ cbind(
+   indegree   = quantile(indegree, c(.025, .5, .975), na.rm = TRUE),
+   outdegree  = quantile(outdegree, c(.025, .5, .975), na.rm = TRUE),
+   closeness  = quantile(closeness, c(.025, .5, .975), na.rm = TRUE),
+   betweeness = quantile(betweeness, c(.025, .5, .975), na.rm = TRUE)
+ )
+})
+
+# compute some statistics at the graph level:
+cbind(
+  size    = vcount(g),
+  nedges  = ecount(g),
+  density = edge_density(g),
+  recip   = reciprocity(g),
+  centr   = centr_betw(g)$centralization,
+  pathLen = mean_distance(g)
+  )
+```
+
+
+## Country network  
+
+The same bibliometric data can be used to illustrate the construction of country network (Figure 6) in meta-analytic evidence base.   
+
+### Data 3   
+
+Extract country of affiliation information from bibliographic records, if recorded, then create a matrix:    
+
+```{r bib2.data3, warning = FALSE, message = FALSE, echo = TRUE, fig.height=12, fig.width=12}
+# country
+M_country <- metaTagExtraction(M, Field = "AU_CO", sep = ";") 
+NetMatrix <- biblioNetwork(M_country, analysis = "coupling", network = "countries", sep = ";")
+
+net_matrix <- as.matrix(NetMatrix)
+#get rid of collaboration with same country
+diag(net_matrix) <- 0 
+# getting rid of lower triangle
+net_matrix[lower.tri(net_matrix)] <- 0 
+
+# colnames(net_matrix) - change to title case:
+colnames(net_matrix) <- str_to_title(colnames(net_matrix))
+#rownames(net_matrix) - change to title case:
+rownames(net_matrix) <- str_to_title(rownames(net_matrix))
+#Fix "Usa" to "United States" :
+colnames(net_matrix)[colnames(net_matrix) == "Usa"] <- "United States"
+rownames(net_matrix)[rownames(net_matrix) == "Usa"] <- "United States"
+```
+
+### Visualization   
+
+Plot construction:     
+
+```{r Figure 6, warning = FALSE, echo = TRUE, fig.height=7, fig.width=7}
+# color palette
+color <- viridis::viridis(34, alpha = 1, option = "D")
+color <- color[sample(1:34)] 
+
+circos.clear()
+circos.par(start.degree = 90, 
+           gap.degree = 3,  
+           points.overflow.warning = FALSE)
+
+#png(filename = "Box2_country.png", width = 5, height = 5, units = "in", type = "windows", res = 400)
+chordDiagram(net_matrix, 
+             grid.col = color, transparency = 0.1, 
+             directional = 1,direction.type = c("arrows", "diffHeight"), diffHeight  = -0.04, annotationTrack = "grid", annotationTrackHeight = c(0.05, 0.1),link.arr.type = "big.arrow",link.sort = TRUE, link.largest.ontop = TRUE,
+             preAllocateTracks = 1)
+# add text and axis
+circos.trackPlotRegion(track.index = 1, panel.fun = function(x, y) {
+  xlim = get.cell.meta.data("xlim")
+  ylim = get.cell.meta.data("ylim")
+  sector.index = get.cell.meta.data("sector.index")
+  # add names to the sector. 
+  circos.text(x = mean(xlim), y = ylim[1] + .01, 
+              labels = sector.index, facing = "clockwise", # clockwise
+              niceFacing = TRUE, cex = 0.6, adj = c(0, 0.5))
+  # add graduation on axis
+  circos.axis(h = "top", labels.cex = 0.01, major.tick.length = 0.01, sector.index = sector.index, track.index = 2, labels.niceFacing = T)
+}, bg.border = NA)
+```
+
+# Enrichment 3: Altmetric analyses   
+
+We used `Data 4` in the main text to illustrate how to visualize the  alternative impact metrics (Figure 7). `Data 4` was originally used to examine the replicability of the preclinical cancer biology studies @errington2021investigating.    
+
+## Data 4   
+
+Load and show data:    
+
+```{r data4, warning = FALSE, message = FALSE, echo = TRUE}
+# load meta-analytic data
+dat <- suppressMessages(read_csv(here("Data","Timothy_2021.csv")))  
+
+# upload the pre-extracted data.
+altmetrics <- read.csv(here("Data","altmetrics.csv"))
+
+# data prep - convert character to UTF-8
+altmetrics %>% mutate_if(is.character, utf8::utf8_encode) -> altmetrics
+
+# show data in a datatable
+t4 <- altmetrics %>% DT::datatable()
+t4
+```
+
+## Visualization   
+
+Plot construction:   
+
+```{r Figure 7, warning = FALSE, message = FALSE, echo = TRUE, fig.height=8, fig.width=8}
+altmetrics2 <- altmetrics %>% distinct(paper, .keep_all = TRUE)
+altmetrics2 <- altmetrics2 %>% mutate(count = Policy + Patent)
+altmetrics2 <- altmetrics2 %>% mutate(group = rep("",nrow(altmetrics2)))
+
+#png(filename = "Box3_altmetric1.png", width = 5, height = 3, units = "in", type = "windows", res = 400)
+Box3_altmetric1 <- ggplot2::ggplot() + ggbeeswarm::geom_quasirandom(data = altmetrics2, ggplot2::aes(y = Altmetric.score, x = group, size = count), fill = "#1B9E77", col="#999999", alpha=0.8, shape = 21) + 
+  ylim(0,300) +
+  ggplot2::coord_flip() +
+      ggplot2::theme_bw() +
+      ggplot2::guides(fill = "none", colour = "none") +
+      ggplot2::theme(legend.position= c(0, 1), legend.justification = c(0, 1)) +
+      ggplot2::theme(legend.title = ggplot2::element_text(size = 9)) +
+      ggplot2::theme(legend.direction="horizontal") +
+      ggplot2::theme(legend.background = ggplot2::element_blank()) +
+      ggplot2::labs(x = "Social media interest", y = "Altmetric score", size = latex2exp::TeX("Policy and patent citations")) +
+      #ggplot2::theme(axis.ticks.y = element_blank()) + 
+      ggplot2::theme(axis.text.y = ggplot2::element_text(size = 10, colour ="black",hjust = 0.5, angle = 0))
+
+# add altmetrics and transnational info to an evidence map 
+# load meta-analytic data
+dat <- suppressMessages(read_csv(here("Data","Timothy_2021.csv"))) 
+altmetrics <- read.csv(here("Data","altmetrics.csv"))
+
+# add altmetrics to the original data
+dat <- dat %>% mutate(Altmetric.score = altmetrics$Altmetric.score, policy = altmetrics$Policy, patent = altmetrics$Patent)
+
+dat <- dat[, c("Original paper journal", "Replication study fully completed", "Altmetric.score", "Paper #")]
+names(dat) <- c("dimension1", "dimension2", "score", "study_id")
+dat$score <- round(dat$score,0)
+
+# delete the cases where the replications have not be conducted due to the lack of experimental protocol details
+dat <- dat[!dat$dimension2 == "Not applicable",]
+
+
+# run custom custom_altmetric_aggregate function through each combination 
+est_dat <- 
+  dat %>%
+  group_by(dimension1, dimension2) %>%
+  group_modify(~ custom_altmetric_aggregate(.x)) %>%
+  ungroup()
+
+## NOTE: If you get: "Error in initializePtr() :   function 'cholmod_factor_ldetA' not provided by package 'Matrix' " then run the code:
+# oo <- options(repos = "https://cran.r-project.org/")
+# install.packages("Matrix")
+# install.packages("lme4")
+# options(oo)
+
+est_dat1 <- est_dat
+
+# policy and patent counts
+dat <- suppressMessages(read_csv(here("Data","Timothy_2021.csv")))
+
+# add altemtrics to the original data
+dat <- dat %>% mutate(Altmetric.score = altmetrics$Altmetric.score, policy = altmetrics$Policy, patent = altmetrics$Patent)
+dat <- dat %>% mutate(count = patent + policy)
+
+dat <- dat[, c("Original paper journal", "Replication study fully completed", "count", "Paper #")]
+names(dat) <- c("dimension1", "dimension2", "count", "study_id")
+dat$count <- round(dat$count,0)
+
+# delete the cases where the replications have not be conducted due to the lack of experimental protocol details
+dat <- dat[!dat$dimension2 == "Not applicable",]
+
+# run custom_translation_aggregate function through each cell 
+est_dat <- 
+  dat %>%
+  group_by(dimension1, dimension2) %>%
+  group_modify(~ custom_translation_aggregate(.x)) %>%
+  ungroup()
+
+est_dat2 <- est_dat
+
+colnames(est_dat2)[colnames(est_dat2) == "estimate"] <- "count"
+est_dat2 <- est_dat2[,1:3]
+
+# combine
+est_dat <- merge(est_dat1, est_dat2, by = c("dimension1", "dimension2"))
+est_dat$count <- round(est_dat$count,1)
+
+est_dat <- est_dat %>% mutate(dimension2 = case_when(dimension2 == "No replication"  ~ "Incomplete replication",
+                                             dimension2 == "Full replication"  ~ "Full replication",
+                                             dimension2 == "Partial replication"  ~ "Partial replication"))
+
+est_dat$dimension2 <- as.factor(est_dat$dimension2)
+est_dat$dimension2 <- factor(est_dat$dimension2, levels = c("Full replication", "Partial replication", "Incomplete replication"))
+
+#png(filename = "Box3_altmetric2.png", width = 6, height = 6, units = "in", type = "windows", res = 400)
+Box3_altmetric2 <- ggplot(est_dat, aes(x = dimension1, y = dimension2, size = count, color = estimate)) +
+  geom_point(alpha = 0.6) + 
+  scale_color_gradient(
+    low = "#E6AB02",
+    high = "purple", 
+    limits = c(0,400),
+    guide = "colourbar") + 
+  labs(x = "Dimension 1 (Journal)", y = " Dimension 2 (Replication completion)", color = "Altmetric score") +
+  scale_size_identity() +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  scale_y_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  theme_bw() +
+  guides(size = "none") +
+  theme(legend.position='top', 
+        legend.justification='right',
+        legend.direction='horizontal', 
+        axis.text = element_text(color = "black"),
+        axis.title = element_text(color = "black")) +
+  geom_text(aes(label = as.character(count)), size = 2.5, color = "gray10", fontface = "bold") +
+  labs(caption = "The value in the cell is the average citation count of policies and patents") +
+   theme(plot.caption = element_text(size = 8, color = "gray10", face = "italic"))
+
+#png(filename = "Box3_altmetric.png", width = 5, height = 7, units = "in", type = "windows", res = 400)
+plot_grid(Box3_altmetric1, Box3_altmetric2, labels = c('A','B'), label_size = 14, nrow = 2, ncol = 1, rel_heights = c(1,2)) 
+
+# NOTE: to diplay each plot separately call its ibejct name, e.g.: Box3_altmetric2
+```
+
+
+# Part II - Leveraging the Large Language Model to make your figures for exercise data sets   
+
+This section is for the readers who have difficulties with generalizing and adapting the example `R` scripts above for their own data sets. Below, we provide instructions on how to use three different implementations of Large Language Models (LLMs) which can be used to help with this job.   
+
+Specifically, we will use another two data sets - the exercise data, (`Data_exercise1`) @bodey2018phylogenetically and (`Data_exercise2`)@yang2023ALAN for illustration, and show how to use three LLMs  (Open AI `ChatGPT`, Google `Gemini`, and Microsoft `Copilot`) to adapt parts of the code from above to draw the selected enrichment figures.   
+
+Note that LLMs are probabilistic models and they also train on your earlier instances of work within each platform. The platforms and the models also get modified and upgraded over time. Therefore, the behaviour of these modles can chage over time and will depend on the history of your work with these models. Feel free to modify the prompts and experiment with the models to get the best results. Further, the models are not perfect and may not always provide the best results. Therefore, it is important to critically evaluate the results and use them as a starting point for further work.   
+
+
+## ChatGPT  
+
+You will need to use online (or yur local) user interface (UI) to interact with ChatGPT. You should copy and paste the example prompts provided below into the ChatGPT UI and the copy the code provided in th responses into your R environment (R code document).    
+
+### Grid-like plots   
+
+First, you need to upload your own data (in our case, `Data_exercise1`). For simplicity, we will save the data `Data_exercise1` as an object called `dat`.   
+
+```{r exercise data1, warning = FALSE, echo = TRUE}
+# load data
+dat <- read_csv(here("Data","Data_exercise1.csv"))
+
+# only select necessary variables for th eplot
+dat <- select(dat, id, Study, Flight, Bird.Type, Sexes, Ages, Type, Tag.Type)
+```
+
+Next, let's have a look at the variables in `dat`:   
+
+```{r check exercise data1, warning = FALSE, echo = TRUE}
+# show data 
+dat %>% dfround(3)
+```
+
+Assume that you are clear about the meaning of each variable (meta-data). Assume you want to make a **Grid-like plot** to show the overlap between the variable `Bird.Type` and `Type`. To be more precise, you want to have a evidence gap map where`Bird.Type` (dimension1) is placed on the x-axis, and `Type` (dimension2) is placed on the y-axis, with the number of number of effects (sample size) displayed at the intersection of the x- and y-axes.  
+
+Then, let's try to have conversation with ChatGPT as follows:  
+
+<pre class="code rsplus">
+Assume you are an expert in visualization in R. I have example R code that can be used to make a nice figure.  
+
+The R code is as follows: 
+est_dat <- dat %>%
+  group_by(dimension1, dimension2) %>%
+  summarize(n_es = n()) # get the number of effect sizes for each combination of the two variables
+  
+ggplot(est_dat, aes(x = dimension1, y = dimension2, size = n_es)) +
+  geom_point(alpha = 0.5, color = RColorBrewer::brewer.pal(n = 8, name = "Dark2")[3]) + 
+  labs(x = "Dimension 1 (Intervention)", y = "Dimension 2 (Outcome)") +
+  scale_size(range=c(5,10)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  scale_y_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  theme_bw() +
+  guides(size = "none") +
+  theme(legend.position='top', 
+        legend.justification='right',
+        legend.direction='horizontal',  
+        axis.text = element_text(color = "black"),
+        axis.title = element_text(color = "black")) +
+  geom_text(aes(label = as.character(n_es)), size = 4, color = "gray10") +
+  labs(caption = "The value in the cell is the number of effect sizes") +
+   theme(plot.caption = element_text(size = 10, color = "gray10", face = "italic"),
+         axis.text = element_text(size = 12),
+         axis.title = element_text(face = "bold", size = 12))  
+         
+Now, I want to apply this example R code to my own data named `dat`. The `dat` has two variables named `Bird.Type` and `Type`. Can you use the example R code with my own data `dat` by replacing the variable names dimension1 and dimension2 with Bird.Type and Type, respectively?   
+</pre>
+
+ChatGPT will return you the adapted `R` code, which may look like this:   
+
+```{r ChatGPT figure grid bubbles, warning = FALSE, echo = TRUE, fig.height=10, fig.width=10}
+# R code from ChatGPT
+# Load required libraries
+library(dplyr)
+library(ggplot2)
+library(stringr)
+
+# Get the number of effect sizes for each combination of Bird.Type and Type
+est_dat <- dat %>%
+  group_by(Bird.Type, Type) %>%
+  summarize(n_es = n())
+
+# Create the plot
+ggplot(est_dat, aes(x = Bird.Type, y = Type, size = n_es)) +
+  geom_point(alpha = 0.5, color = RColorBrewer::brewer.pal(n = 8, name = "Dark2")[3]) + 
+  labs(x = "Bird Type", y = "Type") +
+  scale_size(range=c(5,10)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  scale_y_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  theme_bw() +
+  guides(size = "none") +
+  theme(legend.position='top', 
+        legend.justification='right',
+        legend.direction='horizontal',  
+        axis.text = element_text(color = "black"),
+        axis.title = element_text(color = "black")) +
+  geom_text(aes(label = as.character(n_es)), size = 4, color = "gray10") +
+  labs(caption = "The value in the cell is the number of effect sizes") +
+  theme(plot.caption = element_text(size = 10, color = "gray10", face = "italic"),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(face = "bold", size = 12))
+
+```
+
+Nice! You get the grid-like plot where you can identify knowledge gaps by looking at the size of the bubbles. Next, you can make changes to the code and improve the figure according to your own preference, including adjusting the colors, labels, and other plot properties as needed to customize the plot according to your preferences.   
+
+### Alluvial diagrams  
+
+With the same data (`dat`), we next show you how to use ChatGPT  to make an alluvial diagram.   
+
+The dialogue with ChatGPT can be as follows:       
+
+<pre class="code rsplus">
+Assume you are an expert in visualization in R. I have example R code that can be used to make a nice figure. 
+
+The R code is as follows: 
+ggplot(dlong(dat, type_experiment, location, population,  intervention_category, domain, intervention_technique), aes(x = x, next_x = next_x, node = node, next_node = next_node, fill = factor(node), label = node)) +
+  sankey_p(flow.alpha = 0.8,
+              node.color = "transparent") +
+  sankey_p_label(size = 3, color = "white", fill = "gray10", alpha = 0.6) +
+  ggsci::scale_color_tron() + 
+  theme_sankey(base_size = 10) +
+  labs(x = NULL) +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = .5),
+        axis.text.x = element_text(color = "black", size = 9)) +
+scale_x_discrete(labels = c("Moderator 1 \n (Experimental \n approach)", "Moderator 2 \n (Geographical \n location)", "Moderator 3 \n (Population \n characteristic)",  "Moderator 4 \n (Architecture \n category)", "Moderator 5 \n (Behavioral \n domain)", "Moderator 6 \n (Intervention \n technique)"), position = "top")    
+
+Now, I want to apply this example R code to my own data named `dat`. The `dat` has four variables named `Flight`, `Sexes`, `Ages`, `Tag.Type`. Can you use the example R code with my own data `dat` by replacing the variables shown in the example code with the variables in my our data? Note that the function `dlong()`, `sankey_p()`, and `sankey_p_label()` are custom functions.   
+</pre>
+
+
+The adapted `R` code suggested by ChatGPT may look like this:   
+
+```{r ChatGPT figure allovial, warning = FALSE, echo = TRUE, fig.height=5, fig.width=8}
+
+# code returned by ChatGPT 
+library(ggplot2)
+
+# Replace the variables in aes() with your data variables
+ggplot(dlong(dat, Flight, Sexes, Ages, Tag.Type), 
+       aes(x = x, next_x = next_x, node = node, next_node = next_node, 
+           fill = factor(node), label = node)) +
+  sankey_p(flow.alpha = 0.8, node.color = "transparent") +
+  sankey_p_label(size = 3, color = "white", fill = "gray10", alpha = 0.6) +
+  ggsci::scale_color_tron() + 
+  theme_sankey(base_size = 10) +
+  labs(x = NULL) +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = .5),
+        axis.text.x = element_text(color = "black", size = 9)) +
+  scale_x_discrete(labels = c("Flight", "Sexes", "Ages", "Tag Type"), position = "top")
+
+```
+
+Nice! You get your alluvial plot. You can see the flow or overlaps in the level of important moderators or predictors, summarizing their connections and co-linearity and missing data patterns in an accessible manner. Again, you may need to adjust other plot parameters and styling options according to your preferences and requirements.   
+
+### Co-authorship network
+
+We will use the bibliometric data associated with the `Data_exercise2_bib`@yang2023ALAN to illustrate how to construct a co-authorship network by "asking" ChatGPT to adapt the provided example `R` code. We collected bibliographic data of the `Data_exercise2_bib`@yang2023ALAN from Scopus using DOI-based searches.    
+
+We use the function `convert2df()` in the `biblioAnalysis` package to load `Data_exercise2_bib`.   
+
+```{r exercise data2 bib, warning = FALSE, message = FALSE, warning=FALSE, echo = TRUE}
+# load exercise bibliographic data
+Data_exercise2_bib <- convert2df(here("Data","Data_exercise2_bib.csv"), dbsource = "scopus", format = "csv") %>% suppressMessages()
+```
+
+The prompt for ChatGPT can look as follows:    
+
+<pre class="code rsplus">
+Assume you are an expert in visualization in R. I have example R code that can be used to make a nice figure. 
+
+The R code is as follows:
+NetMatrix <- biblioNetwork(M, analysis = "collaboration",  network = "authors", sep = ";") # construct author collaboration network
+net_matrix <- as.matrix(NetMatrix)
+diag(net_matrix) <- 0 
+g <- graph_from_adjacency_matrix(net_matrix, mode = "lower", weighted = "weight")
+V(g)$indegree <-  igraph::degree(g, mode = "in") # computing centrality measures for each vertex 
+V(g)$outdegree <- igraph::degree(g, mode = "out")
+V(g)$closeness <- igraph::closeness(g, mode = "total")
+V(g)$betweeness <- igraph::betweenness(g, normalized = TRUE)
+set.seed(2023)
+wtc <- cluster_walktrap(g) # using random walks to detect the network community
+plot(wtc, g, 
+     vertex.size = V(g)$indegree/3, 
+     vertex.label = NA,
+     edge.arrow.size = .25)
+     
+Now, I want to apply this example R code to my own data named `Data_exercise2_bib`. Can you replace the data `M` by own data `Data_exercise2_bib`?   
+</pre>
+
+ChatGPT will return you the adapted `R` code, which may look like this:   
+
+```{r ChatGPT figure collaborations, warning = FALSE, echo = TRUE, fig.height=8, fig.width=8}
+# Load required libraries
+library(igraph)
+
+# Assuming Data_exercise2_bib is your own data frame containing bibliographic data
+# Construct author collaboration network
+NetMatrix <- biblioNetwork(Data_exercise2_bib, analysis = "collaboration", network = "authors", sep = ";")
+net_matrix <- as.matrix(NetMatrix)
+diag(net_matrix) <- 0 
+g <- graph_from_adjacency_matrix(net_matrix, mode = "lower", weighted = "weight") # Adjust weighted argument based on your data
+
+# Computing centrality measures for each vertex
+V(g)$indegree <-  igraph::degree(g, mode = "in")
+V(g)$outdegree <- igraph::degree(g, mode = "out")
+V(g)$closeness <- igraph::closeness(g, mode = "total")
+V(g)$betweeness <- igraph::betweenness(g, normalized = TRUE)
+
+# graph
+set.seed(2023)
+# Plotting the network with community detection using random walks
+wtc <- cluster_walktrap(g)
+plot(wtc, g, 
+     vertex.size = V(g)$indegree/0.8, # Adjust vertex size based on your preference
+     vertex.label = NA,
+     edge.arrow.size = .25)
+```
+
+Congratulations! You get your first co-authorship network where you can define research group and intuitively reveal authorship dependence. Make sure that your data frame (in our case, `Data_exercise2_bib`) has the necessary structure and columns required by the `biblioNetwork()` function.    
+
+
+### Altmetric analyses    
+
+We will use the alternative metric data associated with the `altmetrics_exercise`@yang2023ALAN to illustrate how to conduct the altmetric analysis by "asking" ChatGPT to adapt the provided example `R` code. The alternative data of the `altmetrics_exercise`@yang2023ALAN were collected from Altmetrics online service (www.altemetric.com). If you have DOI odf studies in your data file, you can use the custom function provided below to automatically extract Altmetric score, policy, and patent citation for each study included in the meta-analytic evidence @yang2023ALAN. Alternatively, you can extract these statistics manually from Altmetrics online service (www.altemetric.com). Anyway, assume you have the `altmetrics_exercise`, which contains Altmetric score, policy, and patent citation.    
+
+```{r ChatGPT exercise data2 altmetric, warning = FALSE, message = FALSE, echo = TRUE}
+
+# if you have a column with DOI, you can use a custom function to extract data using API (but we will skip this step - see below):
+#-------------------not run-------------------#
+#altmetric.crawler <- list(NULL)
+#for (n in 1:length(dat$DOI)) {
+#  # JASON format
+#  altmetric.crawler[[n]] <- try(list(format.Altmetric(custom_getAltmetrics(doi = dat$DOI[n]))),silent=TRUE) }
+
+# get lists within lists
+#altmetric.crawler2 <- sapply(altmetric.crawler, function(x) {x})
+# retrieve stats
+#altmetrics <- altmetric_summary(altmetric.crawler2) 
+#save(data, file = "data.Rdata")
+#write.csv(altmetrics,file = "Data/altmetrics.csv")
+#-------------------not run-------------------#
+
+# load altmetric data
+altmetrics_exercise <- read.csv(here("Data","altmetrics_exercise.csv"))
+# remove NA
+altmetrics_exercise <- na.omit(altmetrics_exercise)
+```
+
+Try to prompt ChatGPT as follows:     
+
+<pre class="code rsplus">
+Assume you are an expert in visualization in R. I have example R code that can be used to make a nice figure. 
+
+The R code is as follows:
+altmetrics2 <- altmetrics %>% distinct(paper, .keep_all = TRUE)
+altmetrics2 <- altmetrics2 %>% mutate(count = Policy + Patent)
+altmetrics2 <- altmetrics2 %>% mutate(group = rep("",nrow(altmetrics2)))
+ggplot2::ggplot() + ggbeeswarm::geom_quasirandom(data = altmetrics2, ggplot2::aes(y = Altmetric.score, x = group, size = count), fill = "#1B9E77", col="#999999", alpha=0.8, shape = 21) + 
+  ggplot2::coord_flip() +
+      ggplot2::theme_bw() +
+      ggplot2::guides(fill = "none", colour = "none") +
+      ggplot2::theme(legend.position= c(0, 1), legend.justification = c(0, 1)) +
+      ggplot2::theme(legend.title = ggplot2::element_text(size = 9)) +
+      ggplot2::theme(legend.direction="horizontal") +
+      ggplot2::theme(legend.background = ggplot2::element_blank()) +
+      ggplot2::labs(x = "Social media interest", y = "Altmetric score", size = "Policy and patent citations") +
+      ggplot2::theme(axis.text.y = ggplot2::element_text(size = 10, colour ="black",hjust = 0.5, angle = 0))
+      
+Now, I want to apply this example R code to my own data named `altmetrics_exercise`. Can you replace the data `altmetrics` by own data `altmetrics_exercise`?
+</pre>
+
+ChatGPT will return some adapted R code which may look like this:   
+
+```{r ChatGPT figure altmetrics, warning = FALSE, message = FALSE, echo = TRUE, fig.height=5, fig.width=5}
+# Load packages
+library(ggplot2)
+library(ggbeeswarm)
+
+# Assuming altmetrics_exercise is your own data frame
+altmetrics2 <- altmetrics_exercise %>% distinct(paper, .keep_all = TRUE)
+altmetrics2 <- altmetrics2 %>% mutate(count = Policy + Patent)
+altmetrics2 <- altmetrics2 %>% mutate(group = rep("", nrow(altmetrics2)))
+
+ggplot() + 
+  geom_quasirandom(data = altmetrics2, aes(y = Altmetric.score, x = group, size = count), fill = "#1B9E77", col = "#999999", alpha = 0.8, shape = 21) + 
+  coord_flip() +
+  theme_bw() +
+  guides(fill = "none", colour = "none") +
+  theme(legend.position = c(0, 1), legend.justification = c(0, 1)) +
+  theme(legend.title = element_text(size = 9)) +
+  theme(legend.direction = "horizontal") +
+  theme(legend.background = element_blank()) +
+  labs(x = "Social media interest", y = "Altmetric score", size = "Policy and patent citations") +
+  theme(axis.text.y = element_text(size = 10, colour = "black", hjust = 0.5, angle = 0))
+```
+
+Awesome! You get the altmetric plot, showing the overall social media attention received by studies within a meta-analysis and the extent to which these studies are translated into practical applications. Of course, you can adjust the aesthetics and theme settings as needed to customize the plot appearance according to your preferences.    
+
+
+
+## Gemini  
+
+### Grid-like plots    
+
+First, you need to upload your own data (in our case, `Data_exercise1`). For simplicity, we store the data `Data_exercise1` as an object called `dat`.    
+
+```{r Gemini exercise load data1, warning = FALSE, echo = TRUE}
+# load data
+dat <- read_csv(here("Data","Data_exercise1.csv"))
+
+# only select necessary variables for the plot
+dat <- select(dat, id, Study, Flight, Bird.Type, Sexes, Ages, Type, Tag.Type)
+```
+
+Next, let's have a look at the variables in `dat`:   
+
+```{r Gemini check exercise data1, warning = FALSE, echo = TRUE}
+# show data 
+dat %>% dfround(3)
+```
+
+Assume that you are clear about the meaning of each variable (meta-data). Assume you want to make a **Grid-like plot** to show the overlap between the variable `Bird.Type` and `Type`. To be more precise, you want to have a evidence gap map where`Bird.Type` (dimension1) is placed on the x-axis, and `Type` (dimension2) is placed on the y-axis, with the number of number of effects (sample size) displayed at the intersection of the x- and y-axes.    
+
+Then, let's try to have conversation with Gemini as follows:   
+
+<pre class="code rsplus">
+Assume you are an expert in visualization in R. I have example R code that can be used to make a nice figure. 
+
+The R code is as follows: 
+est_dat <- dat %>%
+  group_by(dimension1, dimension2) %>%
+  summarize(n_es = n()) # get the number of effect sizes for each combination of the two variables
+  
+ggplot(est_dat, aes(x = dimension1, y = dimension2, size = n_es)) +
+  geom_point(alpha = 0.5, color = RColorBrewer::brewer.pal(n = 8, name = "Dark2")[3]) + 
+  labs(x = "Dimension 1 (Intervention)", y = "Dimension 2 (Outcome)") +
+  scale_size(range=c(5,10)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  scale_y_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  theme_bw() +
+  guides(size = "none") +
+  theme(legend.position='top', 
+        legend.justification='right',
+        legend.direction='horizontal',  
+        axis.text = element_text(color = "black"),
+        axis.title = element_text(color = "black")) +
+  geom_text(aes(label = as.character(n_es)), size = 4, color = "gray10") +
+  labs(caption = "The value in the cell is the number of effect sizes") +
+   theme(plot.caption = element_text(size = 10, color = "gray10", face = "italic"),
+         axis.text = element_text(size = 12),
+         axis.title = element_text(face = "bold", size = 12))
+         
+Now, I want to apply this example R code to my own data named `dat`. The `dat` has two variables named `Bird.Type` and `Type`. Can you use the example R code with my own data `dat` by replacing the variable names dimension1 and dimension2 with Bird.Type and Type, respectively?   
+</pre>
+
+Gemini will return some adapted `R` code which may look like this:   
+
+```{r Gemini figure grid bubbles, warning = FALSE, echo = TRUE, fig.height=10, fig.width=10}
+st_dat <- dat %>%
+  group_by(Bird.Type, Type) %>%
+  summarize(n_es = n()) # get the number of effect sizes for each combination of bird type and type
+
+ggplot(est_dat, aes(x = Bird.Type, y = Type, size = n_es)) +
+  geom_point(alpha = 0.5, color = RColorBrewer::brewer.pal(n = 8, name = "Dark2")[3]) +
+  labs(x = "Bird Type (Intervention)", y = "Type (Outcome)") +
+  scale_size(range=c(5,10)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  scale_y_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  theme_bw() +
+  guides(size = "none") +
+  theme(legend.position='top', 
+        legend.justification='right',
+        legend.direction='horizontal',  
+        axis.text = element_text(color = "black"),
+        axis.title = element_text(color = "black")) +
+  geom_text(aes(label = as.character(n_es)), size = 4, color = "gray10") +
+  labs(caption = "The value in the cell is the number of effect sizes") +
+  theme(plot.caption = element_text(size = 10, color = "gray10", face = "italic"),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(face = "bold", size = 12))
+```
+
+Nice! You get the grid-like plot where you can identify knowledge gaps by looking at the size of the bubbles. Next, you can make changes to the code and improve the figure according to your own preference, including adjusting the colors, labels, and other plot properties as needed to customize the plot according to your preferences.   
+
+
+### Alluvial diagrams   
+
+With the same data (`dat`), we next show you how to use Gemini to make an alluvial diagram.    
+
+Prompt Gemini as follow:     
+
+<pre class="code rsplus">
+Assume you are an expert in visualization in R. I have example R code that can be used to make a nice figure. 
+
+The R code is as follows: 
+ggplot(dlong(dat, type_experiment, location, population,  intervention_category, domain, intervention_technique), aes(x = x, next_x = next_x, node = node, next_node = next_node, fill = factor(node), label = node)) +
+  sankey_p(flow.alpha = 0.8,
+              node.color = "transparent") +
+  sankey_p_label(size = 3, color = "white", fill = "gray10", alpha = 0.6) +
+  ggsci::scale_color_tron() + 
+  theme_sankey(base_size = 10) +
+  labs(x = NULL) +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = .5),
+        axis.text.x = element_text(color = "black", size = 9)) +
+scale_x_discrete(labels = c("Moderator 1 \n (Experimental \n approach)", "Moderator 2 \n (Geographical \n location)", "Moderator 3 \n (Population \n characteristic)",  "Moderator 4 \n (Architecture \n category)", "Moderator 5 \n (Behavioral \n domain)", "Moderator 6 \n (Intervention \n technique)"), position = "top")
+
+Now, I want to apply this example R code to my own data named `dat`. The `dat` has four variables named `Flight`, `Sexes`, `Ages`, `Tag.Type`. Can you use the example R code with my own data `dat` by replacing the variables shown in the example code with the variables in my our data? Note that the function `dlong()`, `sankey_p()`, and `sankey_p_label()` are custom functions.   
+</pre>
+
+Gemini will return you the adapted `R` code:   
+
+```{r Gemini figure alluvial, warning = FALSE, echo = TRUE, fig.height=5, fig.width=8, eval = FALSE}
+
+# code returned by Gemini
+
+ggplot(custom_dlong(dat, Flight, Sexes, Ages, Tag.Type), 
+       aes(x = source_node, next_x = target_node, 
+           node = node_label, next_node = next_node_label, 
+           fill = factor(node_label), label = node_label)) +
+  sankey_p(flow.alpha = 0.8, node.color = "transparent") +
+  sankey_p_label(size = 3, color = "white", fill = "gray10", alpha = 0.6) +
+  ggsci::scale_color_tron() +  # adjust if needed
+  theme_sankey(base_size = 10) +
+  labs(x = NULL) +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = .5),
+        axis.text.x = element_text(color = "black", size = 9)) +
+  scale_x_discrete(labels = c("Flight", "Sexes", "Ages", "Tag.Type"), 
+                      position = "top")
+
+```
+
+Unfortunately this code did not work. The error message was `Error in custom_dlong(dat, Flight, Sexes, Ages, Tag.Type):    
+  could not find function "custom_dlong"`.   
+
+Notice that Gemini changed function name "dlong"to "custom_dlong" and changed some variables names which need to be fixed manually and all the names within "aes" brackets need to be the same as in the original code (Gemini shouldn't have changed that):   
+  
+```{r Gemini figure alluvial fixed, warning = FALSE, echo = TRUE, fig.height=5, fig.width=8}
+
+# code returned by Gemini with some manual fixes:
+
+ggplot(dlong(dat, Flight, Sexes, Ages, Tag.Type), 
+       aes(x = x, next_x = next_x, node = node, next_node = next_node, fill = factor(node), label = node)) +
+  sankey_p(flow.alpha = 0.8, node.color = "transparent") +
+  sankey_p_label(size = 3, color = "white", fill = "gray10", alpha = 0.6) +
+  ggsci::scale_color_tron() +  # adjust if needed
+  theme_sankey(base_size = 10) +
+  labs(x = NULL) +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = .5),
+        axis.text.x = element_text(color = "black", size = 9)) +
+  scale_x_discrete(labels = c("Flight", "Sexes", "Ages", "Tag.Type"), 
+                      position = "top")
+```
+  
+Nice! You get your alluvial plot. You can see the flow or overlaps in the level of important moderators or predictors, summarizing their connections and co-linearity and missing data patterns in an accessible manner. Again, you may need to adjust other plot parameters and styling options according to your preferences and requirements.   
+
+
+### Co-authorship network   
+
+We will use the bibliometric data associated with the `Data_exercise2_bib`@yang2023ALAN to illustrate how to construct a co-authorship network by "asking" Gemini to adapt the provided example `R` code. We collected bibliographic data of the `Data_exercise2_bib`@yang2023ALAN from Scopus using DOI-based searches.   
+We use the function `convert2df()` in the `biblioAnalysis` package to load `Data_exercise2_bib`.   
+
+```{r Gemini exercise data2 bib, warning = FALSE, message = FALSE, warning=FALSE, echo = TRUE}
+# load exercise bibliographic data
+Data_exercise2_bib <- convert2df(here("Data","Data_exercise2_bib.csv"), dbsource = "scopus", format = "csv") %>% suppressMessages()
+```
+
+In Gemini, try prompting as follows:   
+
+<pre class="code rsplus">   
+Assume you are an expert in visualization in R. I have example R code that can be used to make a nice figure.    
+
+The R code is as follows:    
+Data_exercise2_bib <- convert2df(here("Data","Data_exercise2_bib.csv"), dbsource = "scopus", format = "csv") %>% suppressMessages() # load exercise bibliographic data 
+
+NetMatrix <- biblioNetwork(M, analysis = "collaboration",  network = "authors", sep = ";") # construct author collaboration network
+net_matrix <- as.matrix(NetMatrix)
+diag(net_matrix) <- 0 
+g <- graph_from_adjacency_matrix(net_matrix, mode = "lower", weighted = "weight")
+V(g)$indegree <-  igraph::degree(g, mode = "in") # computing centrality measures for each vertex 
+V(g)$outdegree <- igraph::degree(g, mode = "out")
+V(g)$closeness <- igraph::closeness(g, mode = "total")
+V(g)$betweeness <- igraph::betweenness(g, normalized = TRUE)
+set.seed(2023)
+wtc <- cluster_walktrap(g) # using random walks to detect the network community
+plot(wtc, g, 
+     vertex.size = V(g)$indegree/3, 
+     vertex.label = NA,
+     edge.arrow.size = .25)
+     
+Now, I want to apply this example R code to my own data named `Data_exercise2_bib`. Can you replace the data `M` by own data `Data_exercise2_bib`?   
+</pre>
+
+Gemini will return you the adapted `R` code, which may look like this:   
+
+```{r Gemini figure collaborations, warning = FALSE, echo = TRUE, fig.height=8, fig.width=8}
+
+# Assuming Data_exercise2_bib is a data frame containing collaboration information
+NetMatrix <- biblioNetwork(Data_exercise2_bib, analysis = "collaboration", network = "authors", sep = ";") # construct author collaboration network
+
+# Proceed with the rest of the code:
+net_matrix <- as.matrix(NetMatrix)
+diag(net_matrix) <- 0  # Set diagonal elements to 0
+g <- graph_from_adjacency_matrix(net_matrix, mode = "lower", weighted = "weight")
+V(g)$indegree <- igraph::degree(g, mode = "in")  # Computing centrality measures
+V(g)$outdegree <- igraph::degree(g, mode = "out")
+V(g)$closeness <- igraph::closeness(g, mode = "total")
+V(g)$betweeness <- igraph::betweenness(g, normalized = TRUE)
+set.seed(2023)
+wtc <- cluster_walktrap(g)  # Using random walks for community detection
+
+# Plot the network
+plot(wtc, g,
+     vertex.size = V(g)$indegree / 3,  # Adjust vertex size based on indegree
+     vertex.label = NA,
+     edge.arrow.size = 0.25)
+```
+
+Congratulations! You get your first co-authorship network where you can define research group and intuitively reveal authorship dependence. Make sure that your data frame (in our case, `Data_exercise2_bib`) has the necessary structure and columns required by the `biblioNetwork()` function.    
+
+
+### Altmetric analyses   
+
+We will use the alternative metric data associated with the `altmetrics_exercise`@yang2023ALAN to illustrate how to conduct the altmetric analysis by "asking" Gemini to adapt the provided example `R` code. The alternative data of the `altmetrics_exercise`@yang2023ALAN were collected from Altmetrics online service (www.altemetric.com). If you have DOI odf studies in your data file, you can use the custom function provided below to automatically extract Altmetric score, policy, and patent citation for each study included in the meta-analytic evidence @yang2023ALAN. Alternatively, you can extract these statistics manually from Altmetrics online service (www.altemetric.com). Anyway, assume you have the `altmetrics_exercise`, which contains Altmetric score, policy, and patent citation.   
+
+```{r Gemini exercise data2 altmetric, warning = FALSE, message = FALSE, echo = TRUE}
+
+# if you have a column with DOI, you can use a custom function to extract data using API (but we will skip this step - see below):
+#-------------------not run-------------------#
+#altmetric.crawler <- list(NULL)
+#for (n in 1:length(dat$DOI)) {
+#  # JASON format
+#  altmetric.crawler[[n]] <- try(list(format.Altmetric(custom_getAltmetrics(doi = dat$DOI[n]))),silent=TRUE) }
+
+# get lists within lists
+#altmetric.crawler2 <- sapply(altmetric.crawler, function(x) {x})
+# retrieve stats
+#altmetrics <- altmetric_summary(altmetric.crawler2) 
+#save(data, file = "data.Rdata")
+#write.csv(altmetrics,file = "Data/altmetrics.csv")
+#-------------------not run-------------------#
+
+# load altmetric data
+altmetrics_exercise <- read.csv(here("Data","altmetrics_exercise.csv"))
+# remove NA
+altmetrics_exercise <- na.omit(altmetrics_exercise)
+```
+
+Ask Gemini's advice using the following prompt:      
+
+<pre class="code rsplus">
+Assume you are an expert in visualization in R. I have example R code that can be used to make a nice figure. 
+
+The R code is as follows:
+altmetrics_exercise <- read.csv(here("Data","altmetrics_exercise.csv")) # load altmetric data
+altmetrics_exercise <- na.omit(altmetrics_exercise) # remove NA
+altmetrics2 <- altmetrics %>% distinct(paper, .keep_all = TRUE)
+altmetrics2 <- altmetrics2 %>% mutate(count = Policy + Patent)
+altmetrics2 <- altmetrics2 %>% mutate(group = rep("",nrow(altmetrics2)))
+ggplot2::ggplot() + ggbeeswarm::geom_quasirandom(data = altmetrics2, ggplot2::aes(y = Altmetric.score, x = group, size = count), fill = "#1B9E77", col="#999999", alpha=0.8, shape = 21) + 
+  ggplot2::coord_flip() +
+      ggplot2::theme_bw() +
+      ggplot2::guides(fill = "none", colour = "none") +
+      ggplot2::theme(legend.position= c(0, 1), legend.justification = c(0, 1)) +
+      ggplot2::theme(legend.title = ggplot2::element_text(size = 9)) +
+      ggplot2::theme(legend.direction="horizontal") +
+      ggplot2::theme(legend.background = ggplot2::element_blank()) +
+      ggplot2::labs(x = "Social media interest", y = "Altmetric score", size = "Policy and patent citations") +
+      ggplot2::theme(axis.text.y = ggplot2::element_text(size = 10, colour ="black",hjust = 0.5, angle = 0))
+      
+Now, I want to apply this example R code to my own data named `altmetrics_exercise`. Can you replace the data `altmetrics` by own data `altmetrics_exercise`?
+</pre>
+
+Gemini will return you the adapted `R` code, which may look like this:   
+
+```{r Gemini figure altmetrics, warning = FALSE, message = FALSE, echo = TRUE, fig.height=5, fig.width=5}
+# Load your data (assuming it's a CSV file)
+altmetrics_exercise <- read.csv(here("Data", "altmetrics_exercise.csv"))
+
+# Remove NA values (optional)
+# altmetrics_exercise <- na.omit(altmetrics_exercise)  # uncomment if needed
+
+# Create a new data frame with desired columns and manipulations (assuming similar structure)
+altmetrics2 <- altmetrics_exercise %>% 
+  distinct(paper, .keep_all = TRUE) %>% 
+  mutate(count = Policy + Patent) %>% 
+  mutate(group = rep("", nrow(altmetrics_exercise)))  # replace altmetrics_exercise if row count differs
+
+# Create the beeswarm plot
+ggplot2::ggplot() +
+  ggbeeswarm::geom_quasirandom(data = altmetrics2, 
+                             ggplot2::aes(y = Altmetric.score, x = group, size = count), 
+                             fill = "#1B9E77", col = "#999999", alpha = 0.8, shape = 21) +
+  ggplot2::coord_flip() +
+  ggplot2::theme_bw() +
+  ggplot2::guides(fill = "none", colour = "none") +
+  ggplot2::theme(legend.position = c(0, 1), 
+                legend.justification = c(0, 1)) +
+  ggplot2::theme(legend.title = ggplot2::element_text(size = 9)) +
+  ggplot2::theme(legend.direction = "horizontal") +
+  ggplot2::theme(legend.background = ggplot2::element_blank()) +
+  ggplot2::labs(x = "Social media interest", y = "Altmetric score", size = "Policy and patent citations") +
+  ggplot2::theme(axis.text.y = ggplot2::element_text(size = 10, colour = "black", hjust = 0.5, angle = 0))
+```
+
+Awesome! You get the altmetric plot, showing the overall social media attention received by studies within a meta-analysis and the extent to which these studies are translated into practical applications. Of course, you can adjust the aesthetics and theme settings as needed to customize the plot appearance according to your preferences.   
+
+
+## Copilot  
+
+Github Copilot is different form ChatGPT and Gemini because, rather than using chat prompts, it suggests code snippets based on the text and code as they get written. Thus, Copilot generates suggestions for either completing the line of code/text or for the next lines of code. Also, because it is a code extension helper, it does not have onine GUI like ChatGPT and Gemini.   
+
+I order to use Copilot, you need to install it as a VS Code (Visual Studio Code) extension and authenticate your GitHub account. Once installed, you use it by simply starting typing in your desired code snippet and allowing GitHub Copilot to suggest the how to complete what you are already typing. If you like the suggestion, press Tab to accept it.       
+
+Read how to install and set up Copilot here: <https://aloa.co/blog/how-to-use-github-copilot>.   
+
+In order to get useful suggestions from Copilot, It is good to have example code first placed at the top of your R file, so AI can learn from it. Then, for new data and code, you can provide some context and comments for every step of analyses. You can do it by using  comments (lines of code starting with #) and when suggested completion code appears (as grey font text), press Tab to accept the suggestion.   
+
+In our example there are some code chunks that do not need to be modified or just a small simple modification is needed (like loading the data, where you only need to change the file name or path). We will not ask Copilot for suggestions in such cases - just copy and paste these code chunks.    
+
+
+### Grid-like plots    
+
+First, you need to upload your own data (in our case, `Data_exercise1`). For simplicity, we copy the data `Data_exercise1` as `dat.   
+
+```{r Copilot exercise load data1, warning = FALSE, echo = TRUE}
+# load data
+dat <- read_csv(here("Data","Data_exercise1.csv"))
+
+# only select necessary variables for the plot
+dat <- select(dat, id, Study, Flight, Bird.Type, Sexes, Ages, Type, Tag.Type)
+```
+
+Next, let's have a look at the variables in `dat`:   
+
+```{r Copilot check exercise data1, warning = FALSE, echo = TRUE}
+# show data 
+dat %>% dfround(3)
+```
+
+Assume that you are clear about the meaning of each variable (meta-data). Assume you want to make a **Grid-like plot** to show the overlap between the variable `Bird.Type` and `Type`. To be more precise, you want to have a evidence gap map where`Bird.Type` (dimension1) is placed on the x-axis, and `Type` (dimension2) is placed on the y-axis, with the number of number of effects (sample size) displayed at the intersection of the x- and y-axes.    
+
+Then, let's try to have conversation with Copilot by typing instructions as comments (starting with #):    
+
+<pre class="code rsplus">
+get the number of effect sizes for each combination of bird type and type
+</pre>
+
+Suggested code:    
+```{r}
+# get the number of effect sizes for each combination of bird type and type 
+est_dat <- dat %>%
+  group_by(Bird.Type, Type) %>%
+  summarize(n_es = n())
+```
+
+<pre class="code rsplus">
+create the grid-like ggplot from est_data with Bird.Type on x-axis and Type on y-axis, and bubble size proportional to n_es: 
+</pre>
+
+Suggested code may look as follows:     
+
+```{r}
+ggplot(est_dat, aes(x = Bird.Type, y = Type, size = n_es)) +
+  geom_point(alpha = 0.5, color = RColorBrewer::brewer.pal(n = 8, name = "Dark2")[3]) + 
+  labs(x = "Bird Type (Intervention)", y = "Type (Outcome)") +
+  scale_size(range=c(5,10)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  scale_y_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  theme_bw() +
+  guides(size = "none") +
+  theme(legend.position='top', 
+        legend.justification='right',
+        legend.direction='horizontal',  
+        axis.text = element_text(color = "black"),
+        axis.title = element_text(color = "black")) +
+  geom_text(aes(label = as.character(n_es)), size = 4, color = "gray10") +
+  labs(caption = "The value in the cell is the number of effect sizes") +
+  theme(plot.caption = element_text(size = 10, color = "gray10", face = "italic"),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(face = "bold", size = 12))
+```
+
+
+Nice! You get the grid-like plot where you can identify knowledge gaps by looking at the size of the bubbles. Next, you can make changes to the code and improve the figure according to your own preference, including adjusting the colors, labels, and other plot properties as needed to customize the plot according to your preferences.   
+
+
+### Alluvial diagrams   
+
+With the same data (`dat`), we next teach you how to use Copilot to make an alluvial diagram.    
+
+Continue working on the code with Copilot by typing:    
+
+<pre class="code rsplus">
+For N data named `dat and variables `Flight`, `Sexes`, `Ages`, `Tag.Type`.
+Use ggplot and custom functions `dlong()`, `sankey_p()`, and `sankey_p_label()` to create alluvial diagram.    
+ggplot(dlong(dat, Flight, Sexes, Ages, Tag.Type),
+</pre>
+
+Copilot will suggest some adapted `R` code, which may look like this:   
+
+```{r Copilot figure alluvial, warning = FALSE, eval = FALSE, echo = TRUE, fig.height=5, fig.width=8}
+# code returned by Copilot
+ggplot(dlong(dat, Flight, Sexes, Ages, Tag.Type), 
+       aes(x = x, next_x = next_x, 
+           node = node_label, next_node = next_node_label, 
+           fill = factor(node_label), label = node_label)) +
+  sankey_p(flow.alpha = 0.8, node.color = "transparent") +
+  sankey_p_label(size = 3, color = "white", fill = "gray10", alpha = 0.6) +
+  ggsci::scale_color_tron() +  # adjust if needed
+  theme_sankey(base_size = 10) +
+  labs(x = NULL) +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = .5),
+        axis.text.x = element_text(color = "black", size = 9)) +
+```
+
+Unfortunately this code is not compete and some function parameters are wrong for aes(). After manually fixing the code and starting to type the missing last line, Copilot will complete the code correctly.   
+
+Fixed and completed code, with Copilot's help, may look like this:   
+
+```{r Copilot figure alluvial fixed, warning = FALSE, echo = TRUE, fig.height=5, fig.width=8}
+
+# code returned by Gemini with some manual fixes:
+
+ggplot(dlong(dat, Flight, Sexes, Ages, Tag.Type), 
+       aes(x = x, next_x = next_x, node = node, next_node = next_node, fill = factor(node), label = node)) +
+  sankey_p(flow.alpha = 0.8, node.color = "transparent") +
+  sankey_p_label(size = 3, color = "white", fill = "gray10", alpha = 0.6) +
+  ggsci::scale_color_tron() +  # adjust if needed
+  theme_sankey(base_size = 10) +
+  labs(x = NULL) +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = .5),
+        axis.text.x = element_text(color = "black", size = 9)) +
+  scale_x_discrete(labels = c("Flight", "Sexes", "Ages", "Tag.Type"), 
+                      position = "top")
+```
+  
+Nice! You get your alluvial plot. You can see the flow or overlaps in the levels of important moderators or predictors, summarizing their connections and co-linearity and missing data patterns in an accessible manner. Again, you may need to adjust other plot parameters and styling options according to your preferences and requirements.   
+
+
+### Co-authorship network   
+
+We will use the bibliometric data associated with the `Data_exercise2_bib`@yang2023ALAN to illustrate how to construct a co-authorship network by working with Copilot to adapt the provided example `R` code. We collected bibliographic data of the `Data_exercise2_bib`@yang2023ALAN from Scopus using DOI-based searches.   
+We first use the function `convert2df()` in the `biblioAnalysis` package to load `Data_exercise2_bib`.   
+
+```{r Copilot exercise data2 bib, warning = FALSE, message = FALSE, warning=FALSE, echo = TRUE}
+# load exercise bibliographic data
+Data_exercise2_bib <- convert2df(here("Data","Data_exercise2_bib.csv"), dbsource = "scopus", format = "csv") %>% suppressMessages()
+```
+
+For Copilot, type the prompt as:   
+
+<pre class="code rsplus">
+convert bibliographic data from Data_exercise2_bib.csv to dataframe using convert2df()
+</pre>
+
+Completed code may look like this:   
+
+```{r}
+# convert bibliographic data from Data_exercise2_bib.csv to dataframe using convert2df()
+Data_exercise2_bib <- convert2df(here("Data","Data_exercise2_bib.csv"), dbsource = "scopus", format = "csv") %>% suppressMessages()
+```
+
+For Copilot, type the next prompt as:   
+
+<pre class="code rsplus">   
+use biblioNetwork to construct author collaboration network from Data_exercise2_bib and save as NetMatrix
+</pre>
+
+Completed code may look like this:   
+
+```{r}
+#use biblioNetwork to construct author collaboration network from Data_exercise2_bib and save as NetMatrix
+NetMatrix <- biblioNetwork(Data_exercise2_bib, analysis = "collaboration", network = "authors", sep = ";") # construct author collaboration network
+```
+
+For Copilot, type the next prompt as:   
+
+<pre class="code rsplus">   
+Create matrix andset diagonal elements to 0   
+</pre>
+
+Completed code may look like this:   
+
+```{r}
+# Create matrix andset diagonal elements to 0   
+net_matrix <- as.matrix(NetMatrix)
+diag(net_matrix) <- 0  # Set diagonal elements to 0
+```
+
+For Copilot, type the next prompt as:   
+
+<pre class="code rsplus">   
+create g using graph_from_adjacency_matrix() and set indegree, outdegree, closeness, and betweeness for each vertex
+</pre>
+
+Completed code may look like this:   
+
+```{r}
+# create g using graph_from_adjacency_matrix() and set indegree, outdegree, closeness, and betweeness for each vertex 
+g <- graph_from_adjacency_matrix(net_matrix, mode = "lower", weighted = "weight")
+V(g)$indegree <- igraph::degree(g, mode = "in")  # Computing centrality measures\
+V(g)$outdegree <- igraph::degree(g, mode = "out")
+V(g)$closeness <- igraph::closeness(g, mode = "total")
+V(g)$betweeness <- igraph::betweenness(g, normalized = TRUE)
+```
+
+For Copilot, type the next prompt as:   
+
+<pre class="code rsplus">   
+set seed and userandom walks for community detection
+</pre>
+
+Completed code may look like this:   
+
+```{r}
+# set a seed and userandom walks for community detection
+set.seed(2023)
+wtc <- cluster_walktrap(g)  # Using random walks for community detection
+```
+
+For Copilot, type the next prompt as:   
+
+<pre class="code rsplus">   
+Plot the network
+</pre>
+
+Completed code may look like this:   
+
+```{r}
+# sPlot the network
+plot(wtc, g,
+     vertex.size = V(g)$indegree / 3,  # Adjust vertex size based on indegree
+     vertex.label = NA,
+     edge.arrow.size = 0.25)
+```
+
+Congratulations! You get your first co-authorship network where you can define research group and intuitively reveal authorship dependence. Make sure that your data frame (in our case, `Data_exercise2_bib`) has the necessary structure and columns required by the `biblioNetwork()` function.    
+
+
+### Altmetric analyses   
+
+We will use the alternative metric data associated with the `altmetrics_exercise`@yang2023ALAN to illustrate how to conduct the altmetric analysis by "asking" Copilot to adapt the provided example `R` code. The alternative data of the `altmetrics_exercise`@yang2023ALAN were collected from Altmetrics online service (www.altemetric.com). If you have DOI odf studies in your data file, you can use the custom function provided below to automatically extract Altmetric score, policy, and patent citation for each study included in the meta-analytic evidence @yang2023ALAN. Alternatively, you can extract these statistics manually from Altmetrics online service (www.altemetric.com). Anyway, assume you have the `altmetrics_exercise`, which contains Altmetric score, policy, and patent citation.   
+
+```{r Copilot exercise data2 altmetric, warning = FALSE, message = FALSE, echo = TRUE}
+
+# if you have a column with DOI, you can use a custom function to extract data using API (but we will skip this step - see below):
+#-------------------not run-------------------#
+#altmetric.crawler <- list(NULL)
+#for (n in 1:length(dat$DOI)) {
+#  # JASON format
+#  altmetric.crawler[[n]] <- try(list(format.Altmetric(custom_getAltmetrics(doi = dat$DOI[n]))),silent=TRUE) }
+
+# get lists within lists
+#altmetric.crawler2 <- sapply(altmetric.crawler, function(x) {x})
+# retrieve stats
+#altmetrics <- altmetric_summary(altmetric.crawler2) 
+#save(data, file = "data.Rdata")
+#write.csv(altmetrics,file = "Data/altmetrics.csv")
+#-------------------not run-------------------#
+
+# load altmetric data
+altmetrics_exercise <- read.csv(here("Data","altmetrics_exercise.csv"))
+# remove NA
+altmetrics_exercise <- na.omit(altmetrics_exercise)
+
+altmetrics2 <- altmetrics %>% distinct(paper, .keep_all = TRUE)
+altmetrics2 <- altmetrics2 %>% mutate(count = Policy + Patent)
+altmetrics2 <- altmetrics2 %>% mutate(group = rep("",nrow(altmetrics2)))
+```
+
+Type for Copilot:   
+
+<pre class="code rsplus">   
+use ggplot to create a beeswarm plot from altmetrics2 with Altmetric.score on y-axis, group on x-axis, and bubble size proportional to count:
+</pre>
+
+Completed code may look like this:   
+
+```{r Copilot figure altmetrics, warning = FALSE, message = FALSE, echo = TRUE, fig.height=5, fig.width=5}
+#use ggplot to create a beeswarm plot from altmetrics2 with Altmetric.score on y-axis, group on x-axis, and bubble size proportional to count:  
+ggplot2::ggplot() + ggbeeswarm::geom_quasirandom(data = altmetrics2, ggplot2::aes(y = Altmetric.score, x = group, size = count), fill = "#1B9E77", col="#999999", alpha=0.8, shape = 21) + 
+  ggplot2::coord_flip() +
+      ggplot2::theme_bw() +
+      ggplot2::guides(fill = "none", colour = "none") +
+      ggplot2::theme(legend.position= c(0, 1), legend.justification = c(0, 1)) +
+      ggplot2::theme(legend.title = ggplot2::element_text(size = 9)) +
+      ggplot2::theme(legend.direction="horizontal") +
+      ggplot2::theme(legend.background = ggplot2::element_blank()) +
+      ggplot2::labs(x = "Social media interest", y = "Altmetric score", size = "Policy and patent citations") +
+      ggplot2::theme(axis.text.y = ggplot2::element_text(size = 10, colour ="black",hjust = 0.5, angle = 0))
+```
+
+
+Awesome! You get the altmetric plot, showing the overall social media attention received by studies within a meta-analysis and the extent to which these studies are translated into practical applications. Of course, you can adjust the aesthetics and theme settings as needed to customize the plot appearance according to your preferences.   
+
+
+
+# License  
+
+This documented is licensed under the following license: [CC Attribution-Noncommercial-Share Alike 4.0 International](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en).  
+
+# Software and package versions  
+
+```{r versions}
+sessionInfo() %>% pander()
+```
+
+# References  
